@@ -43,7 +43,7 @@ jobs:
             if git rev-parse --verify origin/$branch >/dev/null 2>&1; then
               recent_commit_date=$(git log -1 --format=%cI origin/$branch)
               echo "Branch: $branch, Recent commit date: $recent_commit_date"
-              if [[ "$recent_commit_date" < "$sixty_days_ago" ]]; then
+              if [[ "$branch" != "main" && "$recent_commit_date" < "$sixty_days_ago" ]]; then
                 stale_branches+=($branch)
               fi
             else
