@@ -54,8 +54,10 @@ jobs:
             echo "No branches are stale."
           else
             echo "Stale branches found:"
+            count=1
             for branch in "${stale_branches[@]}"; do
-              echo $branch
+              echo "$count. $branch"
+              count=$((count + 1))
               echo "Deleting branch: $branch"
               git push origin --delete "$branch"
             done
