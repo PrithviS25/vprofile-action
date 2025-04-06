@@ -1,0 +1,82 @@
+name: DELETE STALE BRANCH
+ 
+on:
+  push:
+    branches:
+      - 'release/branch_deletion'
+  workflow_dispatch:
+ 
+permissions:
+  contents: write
+ 
+jobs:
+  delete-stale-branch:
+    environment: test
+    runs-on: ubuntu-latest
+ 
+    steps:
+      - name: Checkout the repository  
+        uses: actions/checkout@v3  
+        with:  
+          fetch-depth: 0 # Fetch all branches  
+ 
+      - name: Fetch all branches  
+        run: git fetch --all  
+ 
+      - name: Get list of all branches  
+        run: |  
+          branches=$(git branch -r | grep -v '\->' | sed 's/origin\///')  
+          echo "Branches: $branches"  
+          echo "$branches" > branches.txt  
+ 
+      - name: Check for Stale Branches
+        id: stale-check
+        run: |  
+          echo "Checking for branches with no commits in the last 60 days..."  
+          stale_branches=()  
+          current_date=$(date -u +%Y-%m-%dT%H:%M:%SZ)  
+          sixty_days_ago=$(date -u -d "-2 days" +%Y-%m-%dT%H:%M:%SZ)  
+ 
+          echo "Current date: $current_date"  
+          echo "Date 2 days ago: $sixty_days_ago"  
+          deleted_branches_list=""
+          for branch in $(cat branches.txt); do  
+            if git rev-parse --verify origin/$branch >/dev/null 2>&1; then  
+              recent_commit_date=$(git log -1 --format=%cI origin/$branch)  
+              echo "Branch: $branch, Recent commit date: $recent_commit_date"  
+              if [[ "$branch" != "main" &&  "$branch" != release/* && "$recent _commit_date" < "$sixty_days_ago" ]]; then  
+                stale_branches+=($branch)  
+              fi  
+            else  
+              echo "Branch $branch does not exist."  
+            fi  
+          done  
+ 
+          if [ ${#stale_branches[@]} -eq 0 ]; then  
+            echo "No branches are stale."
+            echo "deleted_branches=" >> $GITHUB_ENV
+          else  
+            echo "Stale branches found:"  
+            deleted_branches_list=""
+            author=$(git log -1 --format='%an' origin/$branch)
+            deleted_branches_list+="• Branch_Name: **$branch**  Owner: **$author**\n\n"
+            for branch in "${stale_branches[@]}"; do  
+              echo "Deleting branch: $branch"  
+              git push origin --delete "$branch"  
+              deleted_branches_list+="$branch\n"
+            done  
+            echo "deleted_branches=$deleted_branches_list" >> $GITHUB_ENV
+          fi  
+          
+      - name: Send Notification to Teams
+        if: env.deleted_branches != ''
+        env:
+          TEAMS_WEBHOOK_URL: ${{ secrets.TEAMS_WEBHOOK_URL }}
+        run: |
+          message=$(cat <<EOF
+          {
+            "text": "🚀 **Deleted Stale Branches** 🚀\n\n${{ env.deleted_branches }}"
+          }
+          EOF
+          )
+          curl -H "Content-Type: application/json" -d "$message" "$TEAMS_WEBHOOK_URL"
